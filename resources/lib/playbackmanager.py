@@ -23,6 +23,7 @@ class PlaybackManager:
         self.state = State()
         self.player = UpNextPlayer()
         self.demo = DemoOverlay(12005)
+        self.total_play_minutes = 0
 
     def log(self, msg, level=2):
         ulog(msg, name=self.__class__.__name__, level=level)
@@ -165,6 +166,25 @@ class PlaybackManager:
             still_watching_page.show()
             set_property('service.upnext.dialog', 'true')
             showing_still_watching_page = True
+            stillthere_minutes = get_setting_int('stillthere_minutes')
+            self.log('played in a row settings %s' % played_in_a_row_number, 2)
+            self.log('played in a row %s' % self.state.played_in_a_row, 2)
+            self.log('total playback minutes %s' % self.total_play_minutes, 2)
+
+            showing_next_up_page = False
+            showing_still_watching_page = False
+
+            if (played_in_a_row_number and int(self.state.played_in_a_row) >= int(played_in_a_row_number)
+                    and self.total_play_minutes >= stillthere_minutes):
+                self.log('showing still watching page as total minutes is %s' % self.total_play_minutes, 2)
+                still_watching_page.show()
+                set_property('service.upnext.dialog', 'true')
+                showing_still_watching_page = True
+            else:
+                self.log('showing next up page as thresholds not met', 2)
+                next_up_page.show()
+                set_property('service.upnext.dialog', 'true')
+                showing_next_up_page = True
         while (self.player.isPlaying() and (total_time - play_time > 1)
                and not next_up_page.is_cancel() and not next_up_page.is_watch_now()
                and not still_watching_page.is_still_watching() and not still_watching_page.is_cancel()):
@@ -207,5 +227,16 @@ class PlaybackManager:
             self.state.played_in_a_row = 1
         else:
             self.state.played_in_a_row += 1
+        # Add episode runtime to total_play_minutes
+        try:
+            runtime = self.play_item.get_current().get('runtime') or 0
+            self.total_play_minutes += runtime / 60.0
+        except Exception:
+            pass
+
+        # Reset total minutes if user confirms still watching
+        if still_watching_page.is_still_watching():
+            self.total_play_minutes = 0
+
         clear_property('service.upnext.dialog')
         return should_play_default, should_play_non_default
